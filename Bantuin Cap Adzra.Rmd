@@ -1,0 +1,133 @@
+---
+title: "Build Random Forest with SMOTE"
+author: "Muhammad Hafizd Harkaputra"
+date: "2024-04-30"
+output: html_document
+---
+
+# Perbandingan Akurasi Prediksi Diabetes Model Random Forest menggunakan Metode Balancing Data (SMOTE) dan Tanpa SMOTE
+
+## Akses Library
+
+```{r}
+library(UBL)
+library(dplyr)
+library(caTools)
+library(randomForest)
+library(caret)
+```
+
+## Akses Data
+
+```{r}
+data <- read.csv("/Users/hafizdharkaputra/Downloads/diabetes.csv")
+head(data)
+```
+
+## Pre-Processing Data
+
+-   Variabel Outcome adalah label bertipe kategorik dengan nilai 0 dan 1, tetapi pada data mentah tipe datanya masih integer. Jadi Perlu dilakukan konversi ke tipe data kategorik
+
+-   Variabel ***Glucosa, BloodPressure, SkinThickness, Insulin, Body Mass Index (BMI), DiabetesPedigreeFunction, dan Age*** secara fisiologis tidak mungkin bernilai nol, jadi dilakukan pengecekan apakah ada nilai 0 pada variabel-variabel tersebut. Jika ada, maka nilai pada pengamatan tersebut akan diganti dengan nilai rata-rata dari masing-masing variabel tersebut.
+
+```{r}
+data$Outcome <- as.factor(data$Outcome)
+data$Glucose[data$Glucose == 0] <- NA
+data$BloodPressure[data$BloodPressure == 0] <- NA
+data$SkinThickness[data$SkinThickness == 0] <- NA
+data$Insulin[data$Insulin == 0] <- NA
+data$BMI[data$BMI == 0] <- NA
+data$DiabetesPedigreeFunction[data$DiabetesPedigreeFunction == 0] <- NA
+data$Age[data$Age == 0] <- NA
+```
+
+Fungsi merubah nilai ***nol*** pada variabel ke ***NA.***
+
+```{r}
+for(col in c("Glucose", "BloodPressure", "SkinThickness", "Insulin", "BMI", "DiabetesPedigreeFunction", "Age")) {
+  data[[col]][data[[col]] == 0] <- NA
+}
+head(data)
+```
+
+Fungsi mengubah nilai NA menjadi nilai rata-rata pada masing-masing variabel.
+
+```{r}
+for(col in colnames(data)) {
+  # Calculate mean for the current column
+  mean_value <- mean(data[[col]], na.rm = TRUE)
+  
+  # Replace NA values with the mean
+  data[[col]][is.na(data[[col]])] <- mean_value
+}
+```
+
+## Balencing Data (SMOTE)
+
+Object `almost_balanced` yang dibuat terlebih dahulu memiliki tugas untuk memberi tahu fungsi `SmoteClassif()` bahwa kelas mayoritas dan minoritas ingin dibuah berapa kali lebih banyak atau lebih sedikit. Dikarenakan kelas mayoritas atau `response = 0` sudah cukup banyak maka hanya perlu diisi 1 atau jumlah datanya akan dibuat sama tanpa adanya penambahan atau pengurangan, sedangkan untuk kelas minoritas atau `response = 1` perlu diperbanyak setidaknya 2 kali dari jumlah datanya yang sekarang.
+
+```{r}
+table(data$Outcome)
+```
+
+```{r}
+almost_balanced <- list("0" = 1, "1" = 2)
+data_smote <- SmoteClassif(form = Outcome ~ ., 
+                                 dat = data, 
+                                 C.perc = almost_balanced,  
+                                 dist = "HVDM")
+```
+
+Sekarang jumlah data sudah relatif seimbang.
+
+```{r}
+table(data_smote$Outcome)
+```
+
+## Model Random Forest
+
+Model dibangun dengan Data Training 70% dan data Test 30%. Sebagai perbandingan, digunakan set.seed(123) untuk membandingkan model tanpa SMOTE dan SMOTE.
+
+### Model Non-SMOTE (Tanpa Balancing Data)
+
+```{r}
+set.seed(123)
+Split <- sample.split(data, SplitRatio = 0.7)
+Train <- subset(data, Split==TRUE)
+Test <- subset(data, Split==FALSE)
+```
+
+### Akurasi Data Test Model Non-SMOTE
+
+```{r}
+model1<-randomForest(Outcome~., data = Train)
+importance(model1)
+
+p1_test <- predict(model1, newdata = Test)
+p1_test_cm<-confusionMatrix(p1_test, Test$Outcome)
+p1_test_cm
+```
+
+### Model SMOTE (Dengan Balancing Data)
+
+```{r}
+set.seed(123)
+Split <- sample.split(data_smote, SplitRatio = 0.7)
+Train <- subset(data_smote, Split==TRUE)
+Test <- subset(data_smote, Split==FALSE)
+```
+
+### Akurasi Data Test Model SMOTE
+
+```{r}
+model2<-randomForest(Outcome~., data = Train)
+importance(model2)
+
+p1_test <- predict(model2, newdata = Test)
+p1_test_cm<-confusionMatrix(p1_test, Test$Outcome)
+p1_test_cm
+```
+
+## Hasil dan Kesimpulan
+
+Model Random Forest Non SMOTE menghasilkan akurasi prediksi sebesar 75%, sementara Model Random Forest SMOTE menghasilkan akurasi prediksi jauh lebih tinggi di angka 86%. Menurut aku hal ini dikarenakan dengan adanya balancing data mendekati 1:1 melalui augementasi data (data label 1 diperbanyak), hal ini memungkinkan model Random Forest untuk dapat mempelajari dataset lebih baik, sehingga bisa memberikan hasil prediksi yang lebih akurat
